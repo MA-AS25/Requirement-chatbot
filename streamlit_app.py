@@ -1,56 +1,51 @@
 import streamlit as st
-from openai import OpenAI
+import openai
+import pandas as pd
+import os
 
-# Show title and description.
-st.title("💬 Chatbot")
-st.write(
-    "This is a simple chatbot that uses OpenAI's GPT-3.5 model to generate responses. "
-    "To use this app, you need to provide an OpenAI API key, which you can get [here](https://platform.openai.com/account/api-keys). "
-    "You can also learn how to build this app step by step by [following our tutorial](https://docs.streamlit.io/develop/tutorials/llms/build-conversational-apps)."
-)
+# Set your OpenAI API key
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Ask user for their OpenAI API key via `st.text_input`.
-# Alternatively, you can store the API key in `./.streamlit/secrets.toml` and access it
-# via `st.secrets`, see https://docs.streamlit.io/develop/concepts/connections/secrets-management
-openai_api_key = st.text_input("OpenAI API Key", type="password")
-if not openai_api_key:
-    st.info("Please add your OpenAI API key to continue.", icon="🗝️")
-else:
+# Load the Excel data
+df = pd.read_excel("List.xlsx")
 
-    # Create an OpenAI client.
-    client = OpenAI(api_key=openai_api_key)
+# App title
+st.set_page_config(page_title="3D Printer Chatbot with ChatGPT")
+st.write("Ask me about a 3D printer part or function for which you would like to know the requirements:")
 
-    # Create a session state variable to store the chat messages. This ensures that the
-    # messages persist across reruns.
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+# Initialize chat history
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-    # Display the existing chat messages via `st.chat_message`.
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+# Chat input form
+with st.form("chat_form", clear_on_submit=True):
+    user_input = st.text_input("Type your message here:")
+    submitted = st.form_submit_button("Send")
 
-    # Create a chat input field to allow the user to enter a message. This will display
-    # automatically at the bottom of the page.
-    if prompt := st.chat_input("What is up?"):
+# If submitted, process user input
+if submitted and user_input:
+    st.session_state.messages.append({"role": "user", "content": user_input})
 
-        # Store and display the current prompt.
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+    # Prepare Excel context string
+    context = ""
+    for _, row in df.iterrows():
+        context += f"{row['Title']} ({row['Part name']}): {row['Description']}\n"
 
-        # Generate a response using the OpenAI API.
-        stream = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": m["role"], "content": m["content"]}
-                for m in st.session_state.messages
-            ],
-            stream=True,
-        )
+    # Call ChatGPT API
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system", "content": f"You are a helpful assistant for 3D printer specifications. Here are the known details:\n\n{context}"},
+            *st.session_state.messages
+        ]
+    )
 
-        # Stream the response to the chat using `st.write_stream`, then store it in 
-        # session state.
-        with st.chat_message("assistant"):
-            response = st.write_stream(stream)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+    reply = response['choices'][0]['message']['content']
+    st.session_state.messages.append({"role": "assistant", "content": reply})
+
+# Display conversation history
+for message in st.session_state.messages:
+    if message["role"] == "user":
+        st.markdown(f"**You:** {message['content']}")
+    else:
+        st.markdown(f"**Bot:** {message['content']}")
