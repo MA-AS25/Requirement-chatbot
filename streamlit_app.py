@@ -32,7 +32,7 @@ if submitted and user_input:
         context += f"{row['Title']} ({row['Part name']}): {row['Description']}\n"
 
     # Call ChatGPT API
-    response = openai.ChatCompletion.create(
+    response = openai.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[
             {"role": "system", "content": f"You are a helpful assistant for 3D printer specifications. Here are the known details:\n\n{context}"},
